@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF 3x3 Grid Arranger</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="module">
+    // Firebase modular SDK (browser) initialization
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+    import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-storage.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyLN2EAPAY-bQyqr1-KIN6sk_3ZM3wN0A",
+      authDomain: "micromaker-754b0.firebaseapp.com",
+      projectId: "micromaker-754b0",
+      storageBucket: "micromaker-754b0.firebasestorage.app",
+      messagingSenderId: "637670266042",
+      appId: "1:637670266042:web:798dce3b9e23e684f6de83",
+      measurementId: "G-PNYL46XQES"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const storage = getStorage(app);
+
+    // Expose an upload helper on window for non-module code to call
+    window.uploadPdfToFirebase = async function(fileBlob, filename = 'final-grid.pdf'){
+      const path = `exports/${filename}`;
+      const storageRef = ref(storage, path);
+      const snap = await uploadBytes(storageRef, fileBlob);
+      const url = await getDownloadURL(snap.ref);
+      return url;
+    }
+  </script>
+  <style>
+    /* Restored original styling */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#fafafa;color:#1a1a1a;min-height:100vh}
+    .navbar{background:#000;padding:20px 0;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+    .nav-content{max-width:1400px;margin:0 auto;padding:0 40px;display:flex;justify-content:space-between;align-items:center}
+    .logo{color:#fff;font-size:24px;font-weight:700}
+    .logo span{color:#666;font-weight:400}
+    .nav-links{display:flex;gap:30px}
+    .nav-links a{color:#999;text-decoration:none;font-size:14px;font-weight:500}
+    .container{max-width:1400px;margin:0 auto;padding:60px 40px}
+    .hero{text-align:center;margin-bottom:60px}
+    h1{font-size:48px;font-weight:700;margin-bottom:20px}
+    .upload-section{background:#fff;padding:50px;border-radius:12px;border:1px solid #e0e0e0;margin-bottom:40px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+    .upload-btn{display:inline-block;padding:14px 32px;background:#000;color:#fff;border:1px solid #000;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;margin:8px}
+    .upload-btn.secondary{background:#fff;color:#000}
+    #fileInput{display:none}
+    .page{width:210mm;height:297mm;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);margin:20px auto;background:#fff;border-radius:12px;padding:20px}
+    .grid-cell{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}
+    .grid-cell:not(:nth-child(3n)){border-right:0.4px dotted #bbb}
+    .grid-cell:nth-child(-n+6){border-bottom:0.4px dotted #bbb}
+    .page-order-info{position:absolute;bottom:3px;right:3px;background:transparent;color:#777;padding:0;border-radius:0;font-size:7px;opacity:0.9}
+    canvas{max-width:100%;max-height:100%;object-fit:contain}
+    .stats{background:#fff;padding:30px;border-radius:12px;border:1px solid #e0e0e0;margin-bottom:30px;display:flex;justify-content:space-around;gap:30px}
+    .stat-value{font-size:36px;font-weight:700}
+    .info-box{background:#f8f8f8;padding:25px;border-radius:8px;margin-bottom:30px;border-left:3px solid #000}
+    @media (max-width:768px){.container{padding:30px 20px}h1{font-size:32px}.upload-section{padding:30px 20px}}
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-content">
+      <div class="logo">PDF Grid <span>Arranger</span></div>
+      <div class="nav-links"><a href="#features">Features</a><a href="#how-it-works">How it Works</a><a href="#pricing">Pricing</a></div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="hero">
+      <h1>Arrange PDF Pages in 3×3 Grid</h1>
+      <p style="color:#666;max-width:600px;margin:0 auto;line-height:1.6">Professional PDF layout tool with custom back-to-back printing support.</p>
+    </div>
+
+    <div class="upload-section">
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" aria-label="Upload PDF">
+      <button class="upload-btn" id="uploadBtn">📁 Upload PDF</button>
+      <button class="upload-btn" id="downloadBtn" onclick="downloadResult()" disabled>⬇️ Download</button>
+      <button class="upload-btn" id="saveBtn" onclick="saveToFirebase()" disabled>☁️ Save</button>
+      <button class="upload-btn" id="printBtn" onclick="window.print()">🖨️ Print Layout</button>
+    </div>
+
+    <div id="firebaseStatus" style="display:none;padding:15px;border-radius:8px;margin-bottom:20px;text-align:center;border:1px solid #e0e0e0"><span id="firebaseStatusText"></span></div>
+
+    <div class="stats" id="stats" style="display:none">
+      <div class="stat-item"><div class="stat-value" id="totalPages">0</div><div class="stat-label">Total Pages</div></div>
+      <div class="stat-item"><div class="stat-value" id="totalSheets">0</div><div class="stat-label">Print Sheets</div></div>
+      <div class="stat-item"><div class="stat-value" id="frontPages">0</div><div class="stat-label">Front Pages</div></div>
+      <div class="stat-item"><div class="stat-value" id="backPages">0</div><div class="stat-label">Back Pages</div></div>
+    </div>
+
+    <div class="info-box" id="infoBox" style="display:none"><h3>📋 Print Instructions</h3><p style="color:#666">Print front sides first, then flip and print back sides for booklet-style printing.</p></div>
+
+    <div id="preview"></div>
+  </div>
+
+  <script>
+    // Keep the working logic, but wire upload button and file input to it
+    let pdfDoc = null;
+    let lastPdf = null; // store generated jsPDF object so Download can save without reprocessing
+    const preview = document.getElementById('preview');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+
+    // Also support drag & drop on the upload section
+    const uploadSection = document.querySelector('.upload-section');
+    uploadSection.addEventListener('dragover', e => { e.preventDefault(); uploadSection.style.borderColor = '#000' });
+    uploadSection.addEventListener('dragleave', e => { e.preventDefault(); uploadSection.style.borderColor = '' });
+    uploadSection.addEventListener('drop', e => { e.preventDefault(); uploadSection.style.borderColor = ''; loadFile(e.dataTransfer.files[0]); });
+
+    async function loadFile(file){
+      if (!file) return;
+      const isPdf = (file.type && file.type.includes('pdf')) || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) { alert('Please select a PDF file'); return; }
+      try {
+        const buffer = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+        document.getElementById('totalPages').textContent = pdfDoc.numPages;
+          await renderPreview();
+          // clear any previously generated PDF and disable Download/Save while generating
+          lastPdf = null;
+          downloadBtn.disabled = true; if (typeof saveBtn !== 'undefined') saveBtn.disabled = true;
+          document.getElementById('stats').style.display = 'flex';
+          // pre-generate PDF so Download works immediately after upload
+          await generate(false);
+          downloadBtn.disabled = false; if (typeof saveBtn !== 'undefined') saveBtn.disabled = false;
+      } catch (err) { console.error(err); alert('Failed to load PDF'); }
+    }
+
+    function getSheets(total){
+      const sheets = []; const perSheet = 18;
+      for (let i=0;i<total;i+=perSheet){
+        const front=[]; const back=new Array(9).fill(null);
+        for (let j=0;j<9;j++){ const p=i+j*2+1; if (p<=total) front.push(p) }
+        let pos=0; for (let g=0;g<3;g++){ const group=[]; for (let j=0;j<3;j++){ const p=i+(g*3+j)*2+2; group.push(p<=total?p:null) } group.reverse().forEach(p=>back[pos++]=p) }
+        sheets.push({front,back});
+      }
+      return sheets;
+    }
+
+    async function renderPreview(){
+      preview.innerHTML = '';
+      const sheets = getSheets(pdfDoc.numPages);
+      let frontCounter=0, backCounter=0;
+      for (let s=0;s<sheets.length;s++){
+        const front = sheets[s].front; const back = sheets[s].back;
+        frontCounter += front.length; backCounter += back.filter(p=>p!==null).length;
+        preview.appendChild(await createPage(front, `Sheet ${s+1} - Front Side`));
+        preview.appendChild(await createPage(back, `Sheet ${s+1} - Back Side`));
+      }
+      document.getElementById('frontPages').textContent = frontCounter;
+      document.getElementById('backPages').textContent = backCounter;
+      document.getElementById('totalSheets').textContent = sheets.length;
+    }
+
+    async function createPage(pages, label){
+      const container = document.createElement('div'); container.className='page';
+      for (let i=0;i<9;i++){
+        const cell = document.createElement('div'); cell.className='grid-cell';
+        if (pages[i]){
+          const page = await pdfDoc.getPage(pages[i]);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          cell.appendChild(canvas);
+          const badge = document.createElement('div'); badge.className='page-order-info'; badge.textContent = pages[i]; cell.appendChild(badge);
+        } else {
+          cell.style.background = '#f5f5f5';
+        }
+        container.appendChild(cell);
+      }
+      const wrapper = document.createElement('div'); wrapper.appendChild(container); return wrapper;
+    }
+
+    async function generate(save = false){
+      if (!pdfDoc) return alert('No PDF loaded');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit:'mm', format:'a4' });
+      const sheets = getSheets(pdfDoc.numPages);
+      const cellW = 210 / 3, cellH = 297 / 3;
+
+      for (let s = 0; s < sheets.length; s++){
+        for (const side of ['front','back']){
+          if (!(s === 0 && side === 'front')) pdf.addPage();
+          const pages = sheets[s][side];
+
+          // Set stronger, thicker dashed border style for the grid
+          pdf.setDrawColor(50); // darker color
+          pdf.setLineWidth(0.5); // thicker lines (mm)
+          if (pdf.setLineDashPattern) pdf.setLineDashPattern([0.8, 1.8]);
+
+          for (let i = 0; i < 9; i++){
+            if (!pages[i]) continue;
+            const page = await pdfDoc.getPage(pages[i]);
+            const viewport = page.getViewport({ scale: 2 });
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = viewport.width; canvas.height = viewport.height;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const img = canvas.toDataURL('image/jpeg');
+
+            const row = Math.floor(i / 3), col = i % 3;
+            const x = col * cellW, y = row * cellH;
+            pdf.addImage(img, 'JPEG', x, y, cellW, cellH);
+
+            // Draw dotted (dashed) separators — darker and thicker
+            if (col < 2) pdf.line(x + cellW, y, x + cellW, y + cellH);
+            if (row < 2) pdf.line(x, y + cellH, x + cellW, y + cellH);
+
+            // Draw only a small page-number (no colored badge)
+            const label = String(pages[i]);
+            pdf.setTextColor(120); // subtle gray text
+            pdf.setFontSize(5);
+            // position near bottom-right of the cell
+            pdf.text(label, x + cellW - 3.5, y + cellH - 1.8);
+          }
+
+          // Reset dash to solid for any subsequent non-grid drawing
+          if (pdf.setLineDashPattern) pdf.setLineDashPattern([]);
+        }
+      }
+
+      // store generated pdf for later download if requested
+      lastPdf = pdf;
+      // enable download button when generation completes
+      document.getElementById('downloadBtn').disabled = false;
+      if (typeof saveBtn !== 'undefined') saveBtn.disabled = false;
+      if (save) pdf.save('final-grid.pdf');
+    }
+
+    function downloadResult(){
+      (async function(){
+        if (lastPdf){
+          try {
+            // Primary: use jsPDF save
+            lastPdf.save('final-grid.pdf');
+            return;
+          } catch (err) {
+            console.warn('lastPdf.save failed, attempting blob fallback', err);
+          }
+
+          // Fallback: create Blob and use anchor download (works in many hosting environments)
+          try {
+            const blob = typeof lastPdf.output === 'function' ? lastPdf.output('blob') : null;
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = 'final-grid.pdf';
+              document.body.appendChild(a); a.click(); a.remove();
+              URL.revokeObjectURL(url);
+              return;
+            }
+          } catch (err) {
+            console.error('Blob fallback failed', err);
+          }
+        }
+
+        // Final fallback: generate and save immediately (this calls jsPDF.save internally)
+        await generate(true);
+      })();
+    }
+
+    async function saveToFirebase(){
+      if (!window.uploadPdfToFirebase) return alert('Firebase not initialized');
+      if (!lastPdf) await generate(false);
+      const blob = lastPdf.output && typeof lastPdf.output === 'function' ? lastPdf.output('blob') : null;
+      if (!blob) return alert('Could not create PDF blob');
+      const filename = `final-grid-${Date.now()}.pdf`;
+      document.getElementById('firebaseStatus').style.display = 'block';
+      document.getElementById('firebaseStatusText').textContent = 'Uploading...';
+      try{
+        const url = await window.uploadPdfToFirebase(blob, filename);
+        document.getElementById('firebaseStatusText').textContent = 'Saved to Firebase: ' + url;
+      }catch(err){
+        console.error(err);
+        document.getElementById('firebaseStatusText').textContent = 'Upload failed';
+      }
+    }
+  </script>
+</body>
+</html>
